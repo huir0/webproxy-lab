@@ -36,7 +36,7 @@ int main(int argc,char **argv)  // 인수로 포트 번호를 받음
   exit(1);
   }
 
-  Signal(SIGCHLD, sigchld_handler);
+  Signal(SIGCHLD, sigchld_handler); // 좀비 자식을 청소하는 SIGCHLD 핸들러
   listenfd = Open_listenfd(argv[1]);  // 지정된 포트에서 수신 대기하는 소켓을 열기
   /* 클라이언트 연결을 계속해서 수락할 무한루프 */
   while (1) {
@@ -45,12 +45,12 @@ int main(int argc,char **argv)  // 인수로 포트 번호를 받음
   if (Fork() == 0) {
   Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0); // 클라이언트의 호스트 이름과 포트 번호를 가져옴
   printf("Accepted connection from (%s, %s)\n", hostname, port);
-  Close(listenfd);
-  doit(connfd); // 클라이언트의 요청을 처리하고 응답을 반환하는 함수
-  Close(connfd);
-  exit(0);
+  Close(listenfd);  // (자식)리스닝 소켓을 종료
+  doit(connfd); // (자식)클라이언트의 요청을 처리하고 응답을 반환하는 함수
+  Close(connfd);  // (자식) 클라이언트와의 연결 종료
+  exit(0);  // (자식)종료
   }
-  Close(connfd);  // 소켓을 닫아 클라이언트와의 연결을 종료
+  Close(connfd);  // (부모)소켓을 닫아 클라이언트와의 연결을 종료
   }
 }
 
@@ -201,6 +201,6 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 
 void sigchld_handler(int sig)
 {
-  while (waitpid(-1, 0, WNOHANG) > 0);
+  while (waitpid(-1, 0, WNOHANG) > 0); // 모든 자식 프로세스가 종료될 때까지 반복적으로 waitpid 함수 호출
   return;
 }
