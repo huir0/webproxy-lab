@@ -20,6 +20,8 @@ void parse_uri(char* uri, char* hostname, char* path, char* port);
 void build_request_header(char* request_header, char* hostname, char* path, char* port, rio_t* pclient_rio);
 /* 클라이언트에게 오류 메시지를 전송하는 함수 */
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+/* 프로세스 동시성을 위한 시그널 핸들러 */
+void sigchld_handler(int sig);
 
 int main(int argc,char **argv)  // 인수로 포트 번호를 받음
 {
@@ -34,15 +36,20 @@ int main(int argc,char **argv)  // 인수로 포트 번호를 받음
   exit(1);
   }
 
+  Signal(SIGCHLD, sigchld_handler);
   listenfd = Open_listenfd(argv[1]);  // 지정된 포트에서 수신 대기하는 소켓을 열기
   /* 클라이언트 연결을 계속해서 수락할 무한루프 */
   while (1) {
   clientlen = sizeof(clientaddr);
   connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // 연결 수락
+  if (Fork() == 0) {
   Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0); // 클라이언트의 호스트 이름과 포트 번호를 가져옴
   printf("Accepted connection from (%s, %s)\n", hostname, port);
   Close(listenfd);
   doit(connfd); // 클라이언트의 요청을 처리하고 응답을 반환하는 함수
+  Close(connfd);
+  exit(0);
+  }
   Close(connfd);  // 소켓을 닫아 클라이언트와의 연결을 종료
   }
 }
@@ -190,4 +197,10 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
   Rio_writen(fd, buf, strlen(buf));
   Rio_writen(fd, body, strlen(body));
+}
+
+void sigchld_handler(int sig)
+{
+  while (waitpid(-1, 0, WNOHANG) > 0);
+  return;
 }
